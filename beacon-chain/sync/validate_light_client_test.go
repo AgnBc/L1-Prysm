@@ -55,7 +55,7 @@ func TestValidateLightClientOptimisticUpdate(t *testing.T) {
 	cfg.ForkVersionSchedule[[4]byte{5, 0, 0, 0}] = 5
 	params.OverrideBeaconConfig(cfg)
 
-	secondsPerSlot := int(params.BeaconConfig().SecondsPerSlot)
+	secondsPerSlot := int(params.BeaconConfig().SlotTimeDuration.SlotDuration(0))
 	slotIntervals := int(params.BeaconConfig().IntervalsPerSlot)
 	slotsPerEpoch := int(params.BeaconConfig().SlotsPerEpoch)
 
@@ -177,7 +177,7 @@ func TestValidateLightClientFinalityUpdate(t *testing.T) {
 	cfg.ForkVersionSchedule[[4]byte{5, 0, 0, 0}] = 5
 	params.OverrideBeaconConfig(cfg)
 
-	secondsPerSlot := int(params.BeaconConfig().SecondsPerSlot)
+	secondsPerSlot := int(params.BeaconConfig().SlotTimeDuration.SlotDuration(0))
 	slotIntervals := int(params.BeaconConfig().IntervalsPerSlot)
 	slotsPerEpoch := int(params.BeaconConfig().SlotsPerEpoch)
 
