@@ -167,7 +167,21 @@ func prepareConfigSpec() (map[string]interface{}, error) {
 		if !isSpec {
 			continue
 		}
+
+		tagValue := strings.ToUpper(tField.Tag.Get("yaml"))
+
 		if shouldSkip(tField) {
+			continue
+		}
+
+		// Backwards compatability: Special handling for SECONDS_PER_SLOT.
+		if tagValue == "SECONDS_PER_SLOT" {
+			if config.SlotTimeSchedule != nil && config.SlotTimeSchedule.Length() > 0 {
+				duration := config.SlotTimeSchedule.SlotDuration(0)
+				data[tagValue] = strconv.FormatUint(uint64(duration.Seconds()), 10)
+			} else {
+				data[tagValue] = "0"
+			}
 			continue
 		}
 
