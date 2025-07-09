@@ -587,7 +587,8 @@ func TestToForkVersion(t *testing.T) {
 
 func TestSlotTickerReplayBehaviour(t *testing.T) {
 	secondsPerslot := uint64(1)
-	st := NewSlotTicker(time.Unix(time.Now().Unix(), 0), params.SlotTimeSchedule{{Epoch: 0, SlotDuration: time.Second}}) // 1-second period
+	schedule := &params.SlotTimeSchedule{{Epoch: 0, SlotDuration: time.Second}}
+	st := NewSlotTicker(time.Unix(time.Now().Unix(), 0), schedule) // 1-second period
 	const ticks = 5
 
 	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Second) // make the timeout very close
