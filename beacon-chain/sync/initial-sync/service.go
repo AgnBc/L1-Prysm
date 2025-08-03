@@ -12,6 +12,7 @@ import (
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/blockchain"
 	blockfeed "github.com/OffchainLabs/prysm/v6/beacon-chain/core/feed/block"
 	statefeed "github.com/OffchainLabs/prysm/v6/beacon-chain/core/feed/state"
+	"github.com/OffchainLabs/prysm/v6/beacon-chain/core/peerdas"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/das"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/db/filesystem"
@@ -19,6 +20,7 @@ import (
 	p2ptypes "github.com/OffchainLabs/prysm/v6/beacon-chain/p2p/types"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/startup"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/sync"
+	prysmsync "github.com/OffchainLabs/prysm/v6/beacon-chain/sync"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/verification"
 	"github.com/OffchainLabs/prysm/v6/cmd/beacon-chain/flags"
 	"github.com/OffchainLabs/prysm/v6/config/params"
@@ -368,15 +370,13 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID, rob blocks.ROBlock) error {
 			continue
 		}
 
-		sidecars := blocks.NewSidecarsFromBlobSidecars(blobSidecars)
-
-		if len(sidecars) != len(req) {
+		if len(blobSidecars) != len(req) {
 			continue
 		}
 		bv := verification.NewBlobBatchVerifier(s.newBlobVerifier, verification.InitsyncBlobSidecarRequirements)
 		avs := das.NewLazilyPersistentStore(s.cfg.BlobStorage, bv)
 		current := s.clock.CurrentSlot()
-		if err := avs.Persist(current, sidecars...); err != nil {
+		if err := avs.Persist(current, blobSidecars...); err != nil {
 			return err
 		}
 
@@ -391,30 +391,61 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID, rob blocks.ROBlock) error {
 }
 
 func (s *Service) fetchOriginColumns(pids []peer.ID, roBlock blocks.ROBlock) error {
-	nodeID := s.cfg.P2P.NodeID()
-	storage := s.cfg.DataColumnStorage
 	samplesPerSlot := params.BeaconConfig().SamplesPerSlot
 
+	// Return early if the origin block has no blob commitments.
+	commitments, err := roBlock.Block().Body().BlobKzgCommitments()
+	if err != nil {
+		return errors.Wrap(err, "fetch blob commitments")
+	}
+
+	if len(commitments) == 0 {
+		return nil
+	}
+
+	// Compute the columns to request.
 	custodyGroupCount, err := s.cfg.P2P.CustodyGroupCount()
 	if err != nil {
-		return errors.Wrap(err, "fetch custody group count from peer")
+		return errors.Wrap(err, "custody group count")
 	}
 
 	samplingSize := max(custodyGroupCount, samplesPerSlot)
-
-	missingColumns, err := sync.MissingDataColumns(roBlock, nodeID, samplingSize, storage)
+	info, _, err := peerdas.Info(s.cfg.P2P.NodeID(), samplingSize)
 	if err != nil {
-		return errors.Wrap(err, "missing data columns")
+		return errors.Wrap(err, "fetch peer info")
 	}
 
-	sidecars, err := sync.RequestDataColumnSidecarsByRoot(s.ctx, missingColumns, roBlock, pids, s.clock, s.cfg.P2P, s.ctxMap, s.newDataColumnsVerifier)
+	// Fetch origin data column sidecars.
+	root := roBlock.Root()
+
+	params := prysmsync.DataColumnSidecarsParams{
+		Ctx:         s.ctx,
+		Tor:         s.clock,
+		P2P:         s.cfg.P2P,
+		CtxMap:      s.ctxMap,
+		Storage:     s.cfg.DataColumnStorage,
+		NewVerifier: s.newDataColumnsVerifier,
+	}
+
+	verfifiedRoDataColumnsByRoot, err := prysmsync.FetchDataColumnSidecars(params, []blocks.ROBlock{roBlock}, info.CustodyColumns)
 	if err != nil {
-		return errors.Wrap(err, "request data column sidecars")
+		return errors.Wrap(err, "fetch data column sidecars")
+	}
+
+	// Save origin data columns to disk.
+	verifiedRoDataColumnsSidecars, ok := verfifiedRoDataColumnsByRoot[root]
+	if !ok {
+		return fmt.Errorf("cannot extract origins data column sidecars for block root %#x - should never happen", root)
+	}
+
+	if err := s.cfg.DataColumnStorage.Save(verifiedRoDataColumnsSidecars); err != nil {
+		return errors.Wrap(err, "save data column sidecars")
 	}
 
 	log.WithFields(logrus.Fields{
 		"blockRoot":   fmt.Sprintf("%#x", roBlock.Root()),
-		"columnCount": len(sidecars),
+		"blobCount":   len(commitments),
+		"columnCount": len(verifiedRoDataColumnsSidecars),
 	}).Info("Successfully downloaded data columns for checkpoint sync block")
 
 	return nil

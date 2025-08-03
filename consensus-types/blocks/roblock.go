@@ -102,7 +102,7 @@ func (s ROBlockSlice) Len() int {
 type BlockWithROSidecars struct {
 	Block   ROBlock
 	Blobs   []ROBlob
-	Columns []RODataColumn
+	Columns []VerifiedRODataColumn
 }
 
 // BlockWithROBlobsSlice gives convenient access to getting a slice of just the ROBlocks,

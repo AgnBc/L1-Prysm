@@ -38,19 +38,19 @@ var (
 		RequireSidecarProposerExpected,
 	}
 
-	// ByRootRequestDataColumnSidecarRequirements defines the set of requirements that DataColumnSidecars received
-	// via the by root request must satisfy in order to upgrade an RODataColumn to a VerifiedRODataColumn.
-	// https://github.com/ethereum/consensus-specs/blob/dev/specs/fulu/p2p-interface.md#datacolumnsidecarsbyroot-v1
-	ByRootRequestDataColumnSidecarRequirements = []Requirement{
+	// ByRangeRequestDataColumnSidecarRequirements defines the set of requirements that DataColumnSidecars received
+	// via the by range request must satisfy in order to upgrade an RODataColumn to a VerifiedRODataColumn.
+	// https://github.com/ethereum/consensus-specs/blob/master/specs/fulu/p2p-interface.md#datacolumnsidecarsbyrange-v1
+	ByRangeRequestDataColumnSidecarRequirements = []Requirement{
 		RequireValidFields,
 		RequireSidecarInclusionProven,
 		RequireSidecarKzgProofVerified,
 	}
 
-	// ByRangeRequestDataColumnSidecarRequirements defines the set of requirements that DataColumnSidecars received
-	// via the by range request must satisfy in order to upgrade an RODataColumn to a VerifiedRODataColumn.
-	// https://github.com/ethereum/consensus-specs/blob/master/specs/fulu/p2p-interface.md#datacolumnsidecarsbyrange-v1
-	ByRangeRequestDataColumnSidecarRequirements = []Requirement{
+	// ByRootRequestDataColumnSidecarRequirements defines the set of requirements that DataColumnSidecars received
+	// via the by root request must satisfy in order to upgrade an RODataColumn to a VerifiedRODataColumn.
+	// https://github.com/ethereum/consensus-specs/blob/master/specs/fulu/p2p-interface.md#datacolumnsidecarsbyroot-v1
+	ByRootRequestDataColumnSidecarRequirements = []Requirement{
 		RequireValidFields,
 		RequireSidecarInclusionProven,
 		RequireSidecarKzgProofVerified,

@@ -888,6 +888,13 @@ func TestErrInvalidFetchedDataDistinction(t *testing.T) {
 }
 
 func TestSendDataColumnSidecarsByRangeRequest(t *testing.T) {
+	params.SetupTestConfigCleanup(t)
+	beaconConfig := params.BeaconConfig()
+	beaconConfig.FuluForkEpoch = 0
+	params.OverrideBeaconConfig(beaconConfig)
+	params.BeaconConfig().InitializeForkSchedule()
+	ctxMap, err := ContextByteVersionsForValRoot(params.BeaconConfig().GenesisValidatorsRoot)
+	require.NoError(t, err)
 	nilTestCases := []struct {
 		name    string
 		request *ethpb.DataColumnSidecarsByRangeRequest
@@ -908,7 +915,10 @@ func TestSendDataColumnSidecarsByRangeRequest(t *testing.T) {
 
 	for _, tc := range nilTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := SendDataColumnSidecarsByRangeRequest(t.Context(), nil, nil, "aRandomPID", nil, tc.request)
+			parameters := DataColumnSidecarsParams{
+				Ctx: t.Context(),
+			}
+			actual, err := SendDataColumnSidecarsByRangeRequest(parameters, "aRandomPID", tc.request)
 			require.NoError(t, err)
 			require.IsNil(t, actual)
 		})
@@ -921,7 +931,10 @@ func TestSendDataColumnSidecarsByRangeRequest(t *testing.T) {
 		params.OverrideBeaconConfig(beaconConfig)
 
 		request := &ethpb.DataColumnSidecarsByRangeRequest{Count: 1, Columns: []uint64{1, 2, 3}}
-		_, err := SendDataColumnSidecarsByRangeRequest(t.Context(), nil, nil, "aRandomPID", nil, request)
+		parameters := DataColumnSidecarsParams{
+			Ctx: t.Context(),
+		}
+		_, err := SendDataColumnSidecarsByRangeRequest(parameters, "aRandomPID", request)
 		require.ErrorContains(t, errMaxRequestDataColumnSidecarsExceeded.Error(), err)
 	})
 
@@ -1033,10 +1046,14 @@ func TestSendDataColumnSidecarsByRangeRequest(t *testing.T) {
 				assert.NoError(t, err)
 			})
 
-			ctx := t.Context()
-			ctxMap := ContextByteVersions{[4]byte{245, 165, 253, 66}: version.Fulu}
+			parameters := DataColumnSidecarsParams{
+				Ctx:    t.Context(),
+				Tor:    clock,
+				P2P:    p1,
+				CtxMap: ctxMap,
+			}
 
-			actual, err := SendDataColumnSidecarsByRangeRequest(ctx, clock, p1, p2.PeerID(), ctxMap, requestSent)
+			actual, err := SendDataColumnSidecarsByRangeRequest(parameters, p2.PeerID(), requestSent)
 			if tc.expectedError != nil {
 				require.ErrorContains(t, tc.expectedError.Error(), err)
 				if util.WaitTimeout(&wg, time.Second) {
@@ -1181,6 +1198,13 @@ func TestIsSidecarIndexRequested(t *testing.T) {
 }
 
 func TestSendDataColumnSidecarsByRootRequest(t *testing.T) {
+	params.SetupTestConfigCleanup(t)
+	beaconConfig := params.BeaconConfig()
+	beaconConfig.FuluForkEpoch = 0
+	params.OverrideBeaconConfig(beaconConfig)
+	params.BeaconConfig().InitializeForkSchedule()
+	ctxMap, err := ContextByteVersionsForValRoot(params.BeaconConfig().GenesisValidatorsRoot)
+	require.NoError(t, err)
 	nilTestCases := []struct {
 		name    string
 		request p2ptypes.DataColumnsByRootIdentifiers
@@ -1197,7 +1221,14 @@ func TestSendDataColumnSidecarsByRootRequest(t *testing.T) {
 
 	for _, tc := range nilTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := SendDataColumnSidecarsByRootRequest(t.Context(), nil, nil, "aRandomPID", nil, tc.request)
+			params := DataColumnSidecarsParams{
+				Ctx:    t.Context(),
+				Tor:    nil,
+				P2P:    nil,
+				CtxMap: nil,
+			}
+
+			actual, err := SendDataColumnSidecarsByRootRequest(params, "aRandomPID", tc.request)
 			require.NoError(t, err)
 			require.IsNil(t, actual)
 		})
@@ -1214,7 +1245,14 @@ func TestSendDataColumnSidecarsByRootRequest(t *testing.T) {
 			{Columns: []uint64{4, 5, 6}},
 		}
 
-		_, err := SendDataColumnSidecarsByRootRequest(t.Context(), nil, nil, "aRandomPID", nil, request)
+		params := DataColumnSidecarsParams{
+			Ctx:    t.Context(),
+			Tor:    nil,
+			P2P:    nil,
+			CtxMap: nil,
+		}
+
+		_, err := SendDataColumnSidecarsByRootRequest(params, "aRandomPID", request)
 		require.ErrorContains(t, errMaxRequestDataColumnSidecarsExceeded.Error(), err)
 	})
 
@@ -1335,10 +1373,14 @@ func TestSendDataColumnSidecarsByRootRequest(t *testing.T) {
 				assert.NoError(t, err)
 			})
 
-			ctx := t.Context()
-			ctxMap := ContextByteVersions{[4]byte{245, 165, 253, 66}: version.Fulu}
+			params := DataColumnSidecarsParams{
+				Ctx:    t.Context(),
+				Tor:    clock,
+				P2P:    p1,
+				CtxMap: ctxMap,
+			}
 
-			actual, err := SendDataColumnSidecarsByRootRequest(ctx, clock, p1, p2.PeerID(), ctxMap, sentRequest)
+			actual, err := SendDataColumnSidecarsByRootRequest(params, p2.PeerID(), sentRequest)
 			if tc.expectedError != nil {
 				require.ErrorContains(t, tc.expectedError.Error(), err)
 				if util.WaitTimeout(&wg, time.Second) {

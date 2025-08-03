@@ -72,7 +72,7 @@ type blocksQueueConfig struct {
 	db                  db.ReadOnlyDatabase
 	mode                syncMode
 	bs                  filesystem.BlobStorageSummarizer
-	dcs                 filesystem.DataColumnStorageSummarizer
+	dcs                 filesystem.DataColumnStorageReader
 	bv                  verification.NewBlobVerifier
 	cv                  verification.NewDataColumnsVerifier
 }

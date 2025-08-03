@@ -96,8 +96,6 @@ func (s *Service) dataColumnSidecarByRootRPCHandler(ctx context.Context, msg int
 		ticker = time.NewTicker(tickerDelay)
 	}
 
-	log.Debug("Serving data column sidecar by root request")
-
 	count := 0
 	for _, ident := range requestedColumnIdents {
 		if err := ctx.Err(); err != nil {

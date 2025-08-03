@@ -3,11 +3,13 @@ package initialsync
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/OffchainLabs/prysm/v6/beacon-chain/core/peerdas"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/db/filesystem"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/p2p"
@@ -78,7 +80,7 @@ type blocksFetcherConfig struct {
 	peerFilterCapacityWeight float64
 	mode                     syncMode
 	bs                       filesystem.BlobStorageSummarizer
-	dcs                      filesystem.DataColumnStorageSummarizer
+	dcs                      filesystem.DataColumnStorageReader
 	bv                       verification.NewBlobVerifier
 	cv                       verification.NewDataColumnsVerifier
 }
@@ -97,7 +99,7 @@ type blocksFetcher struct {
 	p2p             p2p.P2P
 	db              db.ReadOnlyDatabase
 	bs              filesystem.BlobStorageSummarizer
-	dcs             filesystem.DataColumnStorageSummarizer
+	dcs             filesystem.DataColumnStorageReader
 	bv              verification.NewBlobVerifier
 	cv              verification.NewDataColumnsVerifier
 	blocksPerPeriod uint64
@@ -339,6 +341,7 @@ func (f *blocksFetcher) handleRequest(ctx context.Context, start primitives.Slot
 	if response.err == nil {
 		pid, err := f.fetchSidecars(ctx, response.blocksFrom, peers, response.bwb)
 		if err != nil {
+			log.WithError(err).Error("Failed to fetch sidecars")
 			response.err = err
 		}
 
@@ -351,7 +354,6 @@ func (f *blocksFetcher) handleRequest(ctx context.Context, start primitives.Slot
 // fetchSidecars fetches sidecars corresponding to blocks in `response.bwb`.
 // It mutates `Blobs` and `Columns` fields of `response.bwb` with fetched sidecars.
 func (f *blocksFetcher) fetchSidecars(ctx context.Context, pid peer.ID, peers []peer.ID, bwScs []blocks.BlockWithROSidecars) (peer.ID, error) {
-	const batchSize = 32
 	samplesPerSlot := params.BeaconConfig().SamplesPerSlot
 
 	// Find the first block with a slot greater than or equal to the first Fulu slot.
@@ -384,30 +386,43 @@ func (f *blocksFetcher) fetchSidecars(ctx context.Context, pid peer.ID, peers []
 		return blobsPid, nil
 	}
 
-	// Extract blocks.
-	dataColumnBlocks := make([]blocks.ROBlock, 0, len(blocksWithBlobs))
-	for _, blockWithSidecars := range blocksWithDataColumns {
-		block := blockWithSidecars.Block
-		dataColumnBlocks = append(dataColumnBlocks, block)
-	}
-
-	// Fetch data column sidecars.
+	// Compute the columns to request.
 	custodyGroupCount, err := f.p2p.CustodyGroupCount()
 	if err != nil {
-		return blobsPid, errors.Wrap(err, "fetch custody group count from peer")
+		return blobsPid, errors.Wrap(err, "custody group count")
 	}
 
 	samplingSize := max(custodyGroupCount, samplesPerSlot)
-	fetchedDataColumnsByRoot, err := prysmsync.RequestMissingDataColumnsByRange(ctx, f.clock, f.ctxMap, f.p2p, f.rateLimiter, samplingSize, f.dcs, dataColumnBlocks, batchSize)
+	info, _, err := peerdas.Info(f.p2p.NodeID(), samplingSize)
 	if err != nil {
-		return blobsPid, errors.Wrap(err, "fetch missing data columns from peers")
+		return blobsPid, errors.Wrap(err, "custody info")
+	}
+
+	params := prysmsync.DataColumnSidecarsParams{
+		Ctx:         ctx,
+		Tor:         f.clock,
+		P2P:         f.p2p,
+		RateLimiter: f.rateLimiter,
+		CtxMap:      f.ctxMap,
+		Storage:     f.dcs,
+		NewVerifier: f.cv,
+	}
+
+	roBlocks := make([]blocks.ROBlock, 0, len(blocksWithDataColumns))
+	for _, block := range blocksWithDataColumns {
+		roBlocks = append(roBlocks, block.Block)
+	}
+
+	verifiedRoDataColumnsByRoot, err := prysmsync.FetchDataColumnSidecars(params, roBlocks, info.CustodyColumns)
+	if err != nil {
+		return "", errors.Wrap(err, "fetch data column sidecars")
 	}
 
 	// Populate the response.
 	for i := range bwScs {
 		bwSc := &bwScs[i]
 		root := bwSc.Block.Root()
-		if columns, ok := fetchedDataColumnsByRoot[root]; ok {
+		if columns, ok := verifiedRoDataColumnsByRoot[root]; ok {
 			bwSc.Columns = columns
 		}
 	}
@@ -688,10 +703,7 @@ func sortedSliceFromMap(m map[uint64]bool) []uint64 {
 		result = append(result, k)
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i] < result[j]
-	})
-
+	slices.Sort(result)
 	return result
 }
 

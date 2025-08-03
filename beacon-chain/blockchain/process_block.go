@@ -240,9 +240,12 @@ func (s *Service) onBlockBatch(ctx context.Context, blks []consensusblocks.ROBlo
 			}
 		}
 
-		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), b); err != nil {
-			return errors.Wrapf(err, "could not validate sidecar availability at slot %d", b.Block().Slot())
+		if b.Version() < version.Fulu {
+			if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), b); err != nil {
+				return errors.Wrapf(err, "could not validate sidecar availability at slot %d", b.Block().Slot())
+			}
 		}
+
 		args := &forkchoicetypes.BlockAndCheckpoints{Block: b,
 			JustifiedCheckpoint: jCheckpoints[i],
 			FinalizedCheckpoint: fCheckpoints[i]}
